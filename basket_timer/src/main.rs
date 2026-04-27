@@ -86,7 +86,7 @@ fn App() -> Element {
     
     rsx! {
         div {
-            style { include_str!("../assets/styles.css") }
+            style { "{include_str!("../assets/styles.css")}" }
             
             if *show_settings {
                 SettingsPanel {
@@ -131,7 +131,6 @@ fn MainTimer(
                         tokio::spawn(async move {
                             let mut timer = timer_clone.lock().await;
                             timer.state = TimerState::Running;
-                            // La tâche de timer est déjà en cours dans le use_effect
                         });
                     },
                     "▶ Démarrer"
