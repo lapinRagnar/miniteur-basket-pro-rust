@@ -16,9 +16,7 @@ impl AudioManager {
     pub fn new() -> Result<Self> {
         let (_stream, stream_handle) = OutputStream::try_default()?;
         let sink = Sink::try_new(&stream_handle)?;
-        
         let tts = Tts::default()?;
-        
         Ok(Self {
             sink: Arc::new(Mutex::new(Some(sink))),
             tts: Arc::new(Mutex::new(tts)),
@@ -28,17 +26,14 @@ impl AudioManager {
     pub fn say_number(&self, number: u32) -> Result<()> {
         let text = number.to_string();
         println!("🔊 saying: {}", text);
-        
-        if let Ok(tts) = self.tts.lock() {
+        if let Ok(mut tts) = self.tts.lock() {
             let _ = tts.speak(&text, false);
         }
-        
         Ok(())
     }
     
     pub fn play_siren(&self) -> Result<()> {
         println!("🚨 SIRENE !!! 🚨");
-        
         let mut siren_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         siren_path.push("assets/sirene.wav");
         
@@ -54,11 +49,10 @@ impl AudioManager {
                 }
             }
         } else {
-            if let Ok(tts) = self.tts.lock() {
+            if let Ok(mut tts) = self.tts.lock() {
                 let _ = tts.speak("ZERO! ZERO! GAME OVER!", false);
             }
         }
-        
         Ok(())
     }
     
@@ -77,6 +71,6 @@ impl Default for AudioManager {
     }
 }
 
-// Nécessaire pour Send/Sync
+// Nécessaire car Rodio n'est pas Send/Sync par défaut
 unsafe impl Send for AudioManager {}
 unsafe impl Sync for AudioManager {}

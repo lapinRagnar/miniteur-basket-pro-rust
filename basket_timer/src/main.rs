@@ -7,8 +7,7 @@ use timer::{BasketTimer, TimerState};
 use audio::AudioManager;
 use settings::AppSettings;
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
+use tokio::time::{sleep, Duration};
 
 fn main() {
     dioxus::launch(App);
@@ -18,107 +17,97 @@ fn main() {
 struct AppState {
     timer: Arc<Mutex<BasketTimer>>,
     audio: AudioManager,
-    settings: AppSettings,
 }
 
 #[component]
 fn App() -> Element {
-    let mut current_time = use_signal(|| 12);
-    let mut timer_state = use_signal(|| TimerState::Stopped);
+    let current_time = use_signal(|| 12);
+    let timer_state = use_signal(|| TimerState::Stopped);
     let mut show_settings = use_signal(|| false);
-    
     let settings = use_signal(|| AppSettings::load());
     
     let app_state = use_signal(|| {
         let mut timer = BasketTimer::new();
-        let loaded_settings = settings();
-        timer.set_time(loaded_settings.start_seconds);
-        timer.break_duration = loaded_settings.break_seconds;
-        timer.loop_enabled = loaded_settings.loop_enabled;
-        
+        let loaded = settings();
+        timer.set_time(loaded.start_seconds);
+        timer.break_duration = loaded.break_seconds;
+        timer.loop_enabled = loaded.loop_enabled;
         AppState {
             timer: Arc::new(Mutex::new(timer)),
             audio: AudioManager::default(),
-            settings: loaded_settings,
         }
     });
     
     let timer_clone = app_state().timer.clone();
     let audio_clone = app_state().audio.clone();
-    let time_signal = current_time;
-    let state_signal = timer_state;
+    let mut time_signal = current_time;
+    let mut state_signal = timer_state;
     
-    use_effect(move || {
-        thread::spawn(move || {
+    // Tâche asynchrone – on clone à l'intérieur de la closure extérieure
+    use_future(move || {
+        let timer = timer_clone.clone();
+        let audio = audio_clone.clone();
+        async move {
             loop {
                 let should_run = {
-                    let timer = timer_clone.lock().unwrap();
-                    timer.state == TimerState::Running
+                    let timer_guard = timer.lock().unwrap();
+                    timer_guard.state == TimerState::Running
                 };
-                
                 if !should_run {
-                    thread::sleep(Duration::from_millis(100));
+                    sleep(Duration::from_millis(100)).await;
                     continue;
                 }
                 
-                let current_seconds = {
-                    let mut timer = timer_clone.lock().unwrap();
-                    let secs = timer.current_seconds;
-                    
-                    if secs > 0 {
-                        timer.current_seconds -= 1;
+                let is_zero = {
+                    let mut timer_guard = timer.lock().unwrap();
+                    if timer_guard.current_seconds > 0 {
+                        timer_guard.current_seconds -= 1;
+                        false
+                    } else {
+                        true
                     }
-                    
-                    secs
                 };
                 
-                if current_seconds > 0 {
-                    // Mettre à jour l'affichage
-                    time_signal.set(current_seconds);
-                    // Dire le nombre
-                    audio_clone.say_number(current_seconds).ok();
-                } else if current_seconds == 0 {
-                    // Jouer la sirène
-                    audio_clone.play_siren().ok();
-                    
-                    // Gérer la boucle
-                    let mut timer = timer_clone.lock().unwrap();
-                    if timer.loop_enabled {
-                        timer.current_seconds = timer.initial_seconds;
-                        timer.state = TimerState::OnBreak;
-                        drop(timer);
-                        
-                        // Pause
-                        thread::sleep(Duration::from_secs(
-                            timer_clone.lock().unwrap().break_duration as u64
-                        ));
-                        
-                        let mut timer = timer_clone.lock().unwrap();
-                        timer.state = TimerState::Running;
+                if !is_zero {
+                    let secs = { timer.lock().unwrap().current_seconds };
+                    time_signal.set(secs);
+                    audio.say_number(secs).ok();
+                } else {
+                    audio.play_siren().ok();
+                    let mut timer_guard = timer.lock().unwrap();
+                    if timer_guard.loop_enabled {
+                        timer_guard.current_seconds = timer_guard.initial_seconds;
+                        timer_guard.state = TimerState::OnBreak;
+                        drop(timer_guard);
+                        sleep(Duration::from_secs(
+                            timer.lock().unwrap().break_duration as u64
+                        )).await;
+                        let mut timer_guard = timer.lock().unwrap();
+                        timer_guard.state = TimerState::Running;
                     } else {
-                        timer.state = TimerState::Stopped;
+                        timer_guard.state = TimerState::Stopped;
                         state_signal.set(TimerState::Stopped);
                     }
                 }
                 
-                thread::sleep(Duration::from_secs(1));
+                sleep(Duration::from_secs(1)).await;
             }
-        });
+        }
     });
     
     rsx! {
         div {
             if show_settings() {
                 SettingsPanel {
-                    settings: settings,
-                    app_state: app_state,
+                    settings,
+                    app_state,
                     on_close: move |_| show_settings.set(false),
                 }
             } else {
                 MainTimer {
                     current_time: current_time(),
                     timer_state: timer_state(),
-                    app_state: app_state,
+                    app_state,
                     on_settings: move |_| show_settings.set(true),
                 }
             }
@@ -140,7 +129,6 @@ fn MainTimer(
     rsx! {
         div { class: "timer-container",
             div { class: "timer-display", "{time_display}" }
-            
             div { class: "controls",
                 button {
                     class: "btn btn-green",
@@ -152,7 +140,6 @@ fn MainTimer(
                     },
                     "▶ Démarrer"
                 }
-                
                 button {
                     class: "btn btn-yellow",
                     onclick: move |_| {
@@ -162,32 +149,28 @@ fn MainTimer(
                     },
                     "⏸ Pause"
                 }
-                
                 button {
                     class: "btn btn-red",
                     onclick: move |_| {
                         let app = app_state.read();
                         let mut timer = app.timer.lock().unwrap();
                         timer.reset();
+                        // Le signal `current_time` sera mis à jour dès que la future repasse
                     },
                     "🔄 Reset"
                 }
-                
                 button {
                     class: "btn btn-blue",
                     onclick: move |_| on_settings.call(()),
                     "⚙ Paramètres"
                 }
             }
-            
             div { class: "timer-status",
-                {
-                    match timer_state {
-                        TimerState::Running => "⏲ En cours...",
-                        TimerState::Paused => "⏸ En pause",
-                        TimerState::Stopped => "⏹ Arrêté",
-                        TimerState::OnBreak => "☕ Pause",
-                    }
+                match timer_state {
+                    TimerState::Running => "⏲ En cours...",
+                    TimerState::Paused => "⏸ En pause",
+                    TimerState::Stopped => "⏹ Arrêté",
+                    TimerState::OnBreak => "☕ Pause",
                 }
             }
         }
@@ -196,7 +179,7 @@ fn MainTimer(
 
 #[component]
 fn SettingsPanel(
-    settings: Signal<AppSettings>,
+    mut settings: Signal<AppSettings>,
     app_state: Signal<AppState>,
     on_close: EventHandler<()>,
 ) -> Element {
@@ -207,7 +190,6 @@ fn SettingsPanel(
     rsx! {
         div { class: "settings-container",
             h2 { "Paramètres" }
-            
             div { class: "settings-form",
                 label { "Temps de départ (secondes):" }
                 input {
@@ -221,7 +203,6 @@ fn SettingsPanel(
                     min: "1",
                     max: "3600",
                 }
-                
                 label { "Durée de pause (secondes):" }
                 input {
                     r#type: "number",
@@ -234,7 +215,6 @@ fn SettingsPanel(
                     min: "0",
                     max: "300",
                 }
-                
                 label { "Répéter en boucle:" }
                 input {
                     r#type: "checkbox",
@@ -244,32 +224,27 @@ fn SettingsPanel(
                     },
                 }
             }
-            
             div { class: "settings-buttons",
                 button {
                     class: "btn btn-green",
                     onclick: move |_| {
-                        let new_settings = AppSettings {
+                        let new = AppSettings {
                             start_seconds: start_val(),
                             break_seconds: break_val(),
                             loop_enabled: loop_val(),
                         };
-                        
                         let app = app_state.read();
                         let mut timer = app.timer.lock().unwrap();
-                        timer.set_time(new_settings.start_seconds);
-                        timer.break_duration = new_settings.break_seconds;
-                        timer.loop_enabled = new_settings.loop_enabled;
+                        timer.set_time(new.start_seconds);
+                        timer.break_duration = new.break_seconds;
+                        timer.loop_enabled = new.loop_enabled;
                         timer.reset();
-                        
-                        let _ = new_settings.save();
-                        settings.set(new_settings);
-                        
+                        let _ = new.save();
+                        settings.set(new);
                         on_close.call(());
                     },
                     "💾 Sauvegarder"
                 }
-                
                 button {
                     class: "btn btn-gray",
                     onclick: move |_| on_close.call(()),

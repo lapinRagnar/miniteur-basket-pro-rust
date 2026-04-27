@@ -1,6 +1,3 @@
-use std::time::{Duration, Instant};
-use std::thread;
-
 #[derive(Clone, PartialEq)]
 pub enum TimerState {
     Stopped,

@@ -22,7 +22,6 @@ impl Default for AppSettings {
 impl AppSettings {
     pub fn load() -> Self {
         let config_path = Self::get_config_path();
-        
         if config_path.exists() {
             if let Ok(data) = fs::read_to_string(&config_path) {
                 if let Ok(settings) = serde_json::from_str(&data) {
@@ -30,20 +29,16 @@ impl AppSettings {
                 }
             }
         }
-        
         Self::default()
     }
     
     pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
         let config_path = Self::get_config_path();
-        
         if let Some(parent) = config_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        
         let data = serde_json::to_string_pretty(self)?;
         fs::write(config_path, data)?;
-        
         Ok(())
     }
     

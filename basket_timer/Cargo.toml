@@ -4,35 +4,17 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# Interface graphique multiplateforme
 dioxus = { version = "0.5", features = ["mobile"] }
-
-# Audio pour lire la sirène
 rodio = "0.17"
-
-# Gestion des erreurs
 anyhow = "1.0"
-thiserror = "1.0"
-
-# Synthèse vocale
 tts = "0.26"
-
-# Gestion des fichiers de configuration
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+dirs = "5.0"
+tokio = { version = "1.0", features = ["full", "rt"] }
 
-# Utilitaires
-chrono = "0.4"
-tokio = { version = "1.0", features = ["full"] }
-dirs = "5.0"  # ← AJOUTER CETTE LIGNE
-
-# Pour le déploiement mobile
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 dioxus-desktop = "0.5"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 dioxus-web = "0.5"
-
-# Configuration de l'APK Android
-[package.metadata.android]
-apk_path = "target/android-artifacts/app/build/outputs/apk/debug/app-debug.apk"
