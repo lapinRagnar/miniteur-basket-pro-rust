@@ -99,20 +99,24 @@ Configure → Click "Settings" to customize
 
 
 ## Keyboard Shortcuts (Desktop)
+```
 |Action	  |Shortcut|
 |Start	  |Space|
 |Pause	  |P|
 |Reset	  |R|
 |Settings |S|
+```
 
 # 🏗️ Technical Architecture
 
+```
 // Pure Rust stack
 ├── Dioxus        → Cross-platform UI (React-like)
 ├── Rodio         → High-performance audio playback
 ├── tts-rs        → Native text-to-speech
 ├── Tokio         → Async runtime for precise timing
 └── Serde         → Persistent settings storage
+```
 
 # 🎵 Audio Features
 ### Voice Announcements
@@ -127,6 +131,8 @@ Configure → Click "Settings" to customize
 - Loops automatically for attention-grabbing effect
 
 # 📂 Project Structure
+
+```
 shot-clock-pro/
 ├── src/
 │   ├── main.rs        # UI & app logic
@@ -138,6 +144,7 @@ shot-clock-pro/
 │   └── sirene.wav     # Custom siren (optional)
 ├── Cargo.toml         # Dependencies & build config
 └── README.md          # You are here
+```
 
 # 🔧 Building from Source
 ## Prerequisites
