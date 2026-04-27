@@ -112,7 +112,7 @@ body {
     margin-bottom: 5px;
 }
 
-.settings-form input[type="number"] {
+.settings-form input[type='number'] {
     padding: 12px;
     font-size: 16px;
     border: 2px solid #ddd;
@@ -120,7 +120,7 @@ body {
     width: 100%;
 }
 
-.settings-form input[type="checkbox"] {
+.settings-form input[type='checkbox'] {
     width: 25px;
     height: 25px;
     cursor: pointer;

@@ -31,7 +31,7 @@ fn App() -> Element {
     let settings = use_signal(|| AppSettings::load());
     
     // Initialiser l'état de l'app
-    let mut app_state = use_signal(|| {
+    let app_state = use_signal(|| {
         let mut timer = BasketTimer::new();
         let loaded_settings = settings();
         timer.set_time(loaded_settings.start_seconds);
@@ -86,20 +86,18 @@ fn App() -> Element {
     
     rsx! {
         div {
-            style { "{include_str!("../assets/styles.css")}" }
-            
-            if *show_settings {
+            if show_settings() {
                 SettingsPanel {
                     settings: settings,
                     app_state: app_state,
-                    on_close: move || show_settings.set(false),
+                    on_close: move |_| show_settings.set(false),
                 }
             } else {
                 MainTimer {
-                    current_time: *current_time,
-                    timer_state: *timer_state,
+                    current_time: current_time(),
+                    timer_state: timer_state(),
                     app_state: app_state,
-                    on_settings: move || show_settings.set(true),
+                    on_settings: move |_| show_settings.set(true),
                 }
             }
         }
@@ -111,7 +109,7 @@ fn MainTimer(
     current_time: u32,
     timer_state: TimerState,
     app_state: Signal<AppState>,
-    on_settings: EventHandler,
+    on_settings: EventHandler<()>,
 ) -> Element {
     let minutes = current_time / 60;
     let seconds = current_time % 60;
@@ -170,11 +168,13 @@ fn MainTimer(
             }
             
             div { class: "timer-status",
-                match timer_state {
-                    TimerState::Running => "⏲ En cours...",
-                    TimerState::Paused => "⏸ En pause",
-                    TimerState::Stopped => "⏹ Arrêté",
-                    TimerState::OnBreak => "☕ Pause",
+                {
+                    match timer_state {
+                        TimerState::Running => "⏲ En cours...",
+                        TimerState::Paused => "⏸ En pause",
+                        TimerState::Stopped => "⏹ Arrêté",
+                        TimerState::OnBreak => "☕ Pause",
+                    }
                 }
             }
         }
@@ -185,7 +185,7 @@ fn MainTimer(
 fn SettingsPanel(
     settings: Signal<AppSettings>,
     app_state: Signal<AppState>,
-    on_close: EventHandler,
+    on_close: EventHandler<()>,
 ) -> Element {
     let mut start_val = use_signal(|| settings().start_seconds);
     let mut break_val = use_signal(|| settings().break_seconds);
