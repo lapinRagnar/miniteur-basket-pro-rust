@@ -155,7 +155,7 @@ cargo apk build --release
 cargo apk run
 
 # Web (WASM)
-```
+
 cargo install dioxus-cli
 dx serve --platform web
 
