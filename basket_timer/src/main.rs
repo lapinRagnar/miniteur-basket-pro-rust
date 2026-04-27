@@ -6,18 +6,18 @@ use dioxus::prelude::*;
 use timer::{BasketTimer, TimerState};
 use audio::AudioManager;
 use settings::AppSettings;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 fn main() {
-    // Lancer l'application Dioxus
     dioxus::launch(App);
 }
 
 #[derive(Clone)]
 struct AppState {
     timer: Arc<Mutex<BasketTimer>>,
-    audio: Arc<Mutex<AudioManager>>,
+    audio: AudioManager,
     settings: AppSettings,
 }
 
@@ -27,10 +27,8 @@ fn App() -> Element {
     let mut timer_state = use_signal(|| TimerState::Stopped);
     let mut show_settings = use_signal(|| false);
     
-    // Charger les paramètres
     let settings = use_signal(|| AppSettings::load());
     
-    // Initialiser l'état de l'app
     let app_state = use_signal(|| {
         let mut timer = BasketTimer::new();
         let loaded_settings = settings();
@@ -40,47 +38,71 @@ fn App() -> Element {
         
         AppState {
             timer: Arc::new(Mutex::new(timer)),
-            audio: Arc::new(Mutex::new(AudioManager::default())),
+            audio: AudioManager::default(),
             settings: loaded_settings,
         }
     });
     
-    // Timer task
+    let timer_clone = app_state().timer.clone();
+    let audio_clone = app_state().audio.clone();
+    let time_signal = current_time;
+    let state_signal = timer_state;
+    
     use_effect(move || {
-        let timer_clone = app_state().timer.clone();
-        let audio_clone = app_state().audio.clone();
-        let time_signal = current_time;
-        let state_signal = timer_state;
-        
-        tokio::spawn(async move {
-            let mut timer_guard = timer_clone.lock().await;
-            
-            // Callback pour chaque tick
-            let on_tick = Arc::new(move |seconds: u32| {
-                let time_signal_async = time_signal.clone();
-                let audio_clone_async = audio_clone.clone();
-                let state_signal_async = state_signal.clone();
+        thread::spawn(move || {
+            loop {
+                let should_run = {
+                    let timer = timer_clone.lock().unwrap();
+                    timer.state == TimerState::Running
+                };
                 
-                tokio::spawn(async move {
-                    // Mettre à jour l'affichage
-                    time_signal_async.set(seconds);
+                if !should_run {
+                    thread::sleep(Duration::from_millis(100));
+                    continue;
+                }
+                
+                let current_seconds = {
+                    let mut timer = timer_clone.lock().unwrap();
+                    let secs = timer.current_seconds;
                     
-                    // Dire le nombre à haute voix (sauf si c'est 0)
-                    if seconds > 0 {
-                        if let Ok(mut audio) = audio_clone_async.try_lock() {
-                            let _ = audio.say_number(seconds);
-                        }
-                    } else {
-                        // Jouer la sirène à 0
-                        if let Ok(mut audio) = audio_clone_async.try_lock() {
-                            let _ = audio.play_siren();
-                        }
-                        state_signal_async.set(TimerState::Stopped);
+                    if secs > 0 {
+                        timer.current_seconds -= 1;
                     }
-                });
-            });
-            
-            timer_guard.run(on_tick).await;
+                    
+                    secs
+                };
+                
+                if current_seconds > 0 {
+                    // Mettre à jour l'affichage
+                    time_signal.set(current_seconds);
+                    // Dire le nombre
+                    audio_clone.say_number(current_seconds).ok();
+                } else if current_seconds == 0 {
+                    // Jouer la sirène
+                    audio_clone.play_siren().ok();
+                    
+                    // Gérer la boucle
+                    let mut timer = timer_clone.lock().unwrap();
+                    if timer.loop_enabled {
+                        timer.current_seconds = timer.initial_seconds;
+                        timer.state = TimerState::OnBreak;
+                        drop(timer);
+                        
+                        // Pause
+                        thread::sleep(Duration::from_secs(
+                            timer_clone.lock().unwrap().break_duration as u64
+                        ));
+                        
+                        let mut timer = timer_clone.lock().unwrap();
+                        timer.state = TimerState::Running;
+                    } else {
+                        timer.state = TimerState::Stopped;
+                        state_signal.set(TimerState::Stopped);
+                    }
+                }
+                
+                thread::sleep(Duration::from_secs(1));
+            }
         });
     });
     
@@ -125,11 +147,8 @@ fn MainTimer(
                     disabled: timer_state == TimerState::Running,
                     onclick: move |_| {
                         let app = app_state.read();
-                        let timer_clone = app.timer.clone();
-                        tokio::spawn(async move {
-                            let mut timer = timer_clone.lock().await;
-                            timer.state = TimerState::Running;
-                        });
+                        let mut timer = app.timer.lock().unwrap();
+                        timer.state = TimerState::Running;
                     },
                     "▶ Démarrer"
                 }
@@ -138,11 +157,8 @@ fn MainTimer(
                     class: "btn btn-yellow",
                     onclick: move |_| {
                         let app = app_state.read();
-                        let timer_clone = app.timer.clone();
-                        tokio::spawn(async move {
-                            let mut timer = timer_clone.lock().await;
-                            timer.state = TimerState::Paused;
-                        });
+                        let mut timer = app.timer.lock().unwrap();
+                        timer.state = TimerState::Paused;
                     },
                     "⏸ Pause"
                 }
@@ -151,11 +167,8 @@ fn MainTimer(
                     class: "btn btn-red",
                     onclick: move |_| {
                         let app = app_state.read();
-                        let timer_clone = app.timer.clone();
-                        tokio::spawn(async move {
-                            let mut timer = timer_clone.lock().await;
-                            timer.reset();
-                        });
+                        let mut timer = app.timer.lock().unwrap();
+                        timer.reset();
                     },
                     "🔄 Reset"
                 }
@@ -236,28 +249,20 @@ fn SettingsPanel(
                 button {
                     class: "btn btn-green",
                     onclick: move |_| {
-                        // Sauvegarder les paramètres
                         let new_settings = AppSettings {
                             start_seconds: start_val(),
                             break_seconds: break_val(),
                             loop_enabled: loop_val(),
                         };
                         
-                        // Mettre à jour le timer
                         let app = app_state.read();
-                        let timer_clone = app.timer.clone();
-                        tokio::spawn(async move {
-                            let mut timer = timer_clone.lock().await;
-                            timer.set_time(new_settings.start_seconds);
-                            timer.break_duration = new_settings.break_seconds;
-                            timer.loop_enabled = new_settings.loop_enabled;
-                            timer.reset();
-                        });
+                        let mut timer = app.timer.lock().unwrap();
+                        timer.set_time(new_settings.start_seconds);
+                        timer.break_duration = new_settings.break_seconds;
+                        timer.loop_enabled = new_settings.loop_enabled;
+                        timer.reset();
                         
-                        // Sauvegarder dans le fichier
                         let _ = new_settings.save();
-                        
-                        // Mettre à jour le signal
                         settings.set(new_settings);
                         
                         on_close.call(());
