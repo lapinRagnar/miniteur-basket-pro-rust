@@ -83,6 +83,7 @@ Configure → Click "Settings" to customize
 
 ## Main Controls
 
+```
 ┌─────────────────────────────────────┐
 |                                     |
 │          00:12                      │ ← Current time display 
@@ -94,7 +95,7 @@ Configure → Click "Settings" to customize
 
 |                                     |
 └─────────────────────────────────────┘
-
+```
 
 
 ## Keyboard Shortcuts (Desktop)
