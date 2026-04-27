@@ -1,5 +1,5 @@
 use anyhow::Result;
-use rodio::{Decoder, OutputStream, Sink, Source};
+use rodio::{Decoder, OutputStream, Sink};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
