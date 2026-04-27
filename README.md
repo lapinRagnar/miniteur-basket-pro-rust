@@ -84,11 +84,13 @@ Configure → Click "Settings" to customize
 ## Main Controls
 
 ┌─────────────────────────────────────┐
+|                                     |
 │          00:12                      │ ← Current time display
 │                                     │
 │  [▶ Start]  [⏸ Pause]  [🔄 Reset] │ ← Control buttons
 │                                     │
 │           ⏲ En cours...            │ ← Status indicator
+|                                     |
 └─────────────────────────────────────┘
 
 
