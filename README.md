@@ -70,11 +70,15 @@ At zero → Loud siren triggers
 Configure → Click "Settings" to customize
 
 ⚙️ Configuration Options
+
+
 |Setting	   |Description                                  |Default	         |Range   |
 |-----------------------------------------------------------------------------------------|
 |Start Time	   |Initial countdown seconds	                 |12	             |1-3600  |
 |Break Duration|Pause time between loops (seconds)           |5	                 |0 - 300 |
 |Loop Mode	   |Auto-restart when enabled	                 |Off	             |On/Off  |
+
+
 🎮 Usage Guide
 
 ## Main Controls
