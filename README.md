@@ -56,7 +56,7 @@ shot-clock-pro.apk
 
 # Install with adb (or manually on device)
 adb install shot-clock-pro.apk
-
+```
 
 # First Launch
 Open the app → You'll see 00:12 on screen
