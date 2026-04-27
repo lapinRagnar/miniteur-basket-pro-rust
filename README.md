@@ -82,9 +82,9 @@ Configure → Click "Settings" to customize
 ┌─────────────────────────────────────┐
 │          00:12                      │ ← Current time display
 │                                     │
-│  [▶ Start]  [⏸ Pause]  [🔄 Reset]   │ ← Control buttons
+│  [▶ Start]  [⏸ Pause]  [🔄 Reset] │ ← Control buttons
 │                                     │
-│           ⏲ En cours...             │ ← Status indicator
+│           ⏲ En cours...            │ ← Status indicator
 └─────────────────────────────────────┘
 
 ## Keyboard Shortcuts (Desktop)
@@ -128,7 +128,7 @@ shot-clock-pro/
 ├── Cargo.toml         # Dependencies & build config
 └── README.md          # You are here
 
- # 🔧 Building from Source
+# 🔧 Building from Source
 ## Prerequisites
 
 ```
@@ -155,6 +155,7 @@ cargo apk build --release
 cargo apk run
 
 # Web (WASM)
+```
 cargo install dioxus-cli
 dx serve --platform web
 
