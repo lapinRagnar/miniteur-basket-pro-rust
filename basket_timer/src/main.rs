@@ -7,7 +7,7 @@ use timer::{BasketTimer, TimerState};
 use audio::AudioManager;
 use settings::AppSettings;
 use std::sync::{Arc, Mutex};
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep, Duration, interval};
 use std::process;
 
 fn main() {
@@ -22,8 +22,8 @@ struct AppState {
 
 #[component]
 fn App() -> Element {
-    let mut current_time = use_signal(|| 12);
-    let mut timer_state = use_signal(|| TimerState::Stopped);
+    let current_time = use_signal(|| 12);
+    let timer_state = use_signal(|| TimerState::Stopped);
     let mut show_settings = use_signal(|| false);
     let settings = use_signal(|| AppSettings::load());
 
@@ -48,9 +48,13 @@ fn App() -> Element {
         let timer = timer_clone.clone();
         let audio = audio_clone.clone();
         async move {
-            let mut break_remaining = 0u64;
+            let mut break_remaining = 0;
+            let mut ticker = interval(Duration::from_secs(1));
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             loop {
+                ticker.tick().await;  // attend la prochaine seconde
+
                 let (state, current_secs, loop_enabled, break_duration, initial_seconds) = {
                     let guard = timer.lock().unwrap();
                     (guard.state, guard.current_seconds, guard.loop_enabled, guard.break_duration, guard.initial_seconds)
@@ -58,7 +62,6 @@ fn App() -> Element {
 
                 if break_remaining > 0 {
                     state_signal.set(TimerState::OnBreak);
-                    sleep(Duration::from_secs(1)).await;
                     break_remaining -= 1;
                     if break_remaining == 0 {
                         let mut guard = timer.lock().unwrap();
@@ -72,27 +75,39 @@ fn App() -> Element {
                 match state {
                     TimerState::Running => {
                         if current_secs > 0 {
+                            // Mettre à jour l'affichage IMMÉDIATEMENT
                             time_signal.set(current_secs);
+                            // Lancer la voix en arrière-plan (ne bloque pas le tick)
                             let audio2 = audio.clone();
                             let secs = current_secs;
                             tokio::task::spawn_blocking(move || {
-                                audio2.say_number(secs).ok();
+                                let _ = audio2.say_number(secs);
                             });
+                            // Décrémenter après l'affichage
                             {
                                 let mut guard = timer.lock().unwrap();
                                 if guard.current_seconds > 0 {
                                     guard.current_seconds -= 1;
                                 }
                             }
-                            sleep(Duration::from_secs(1)).await;
                         } else {
+                            // Arrivé à zéro
                             let audio2 = audio.clone();
                             tokio::task::spawn_blocking(move || {
-                                audio2.play_siren().ok();
+                                let _ = audio2.play_siren();
                             });
                             if loop_enabled {
-                                break_remaining = break_duration as u64;
-                                state_signal.set(TimerState::OnBreak);
+                                if break_duration == 0 {
+                                    // Redémarrage immédiat
+                                    let mut guard = timer.lock().unwrap();
+                                    guard.current_seconds = initial_seconds;
+                                    // reste en Running
+                                } else {
+                                    break_remaining = break_duration;
+                                    let mut guard = timer.lock().unwrap();
+                                    guard.state = TimerState::OnBreak;
+                                    state_signal.set(TimerState::OnBreak);
+                                }
                             } else {
                                 let mut guard = timer.lock().unwrap();
                                 guard.state = TimerState::Stopped;
@@ -103,21 +118,21 @@ fn App() -> Element {
                     }
                     TimerState::Paused => {
                         state_signal.set(TimerState::Paused);
-                        sleep(Duration::from_millis(100)).await;
+                        sleep(Duration::from_millis(50)).await;
                     }
                     TimerState::Stopped => {
                         state_signal.set(TimerState::Stopped);
-                        sleep(Duration::from_millis(100)).await;
+                        sleep(Duration::from_millis(50)).await;
                     }
                     TimerState::OnBreak => {
-                        sleep(Duration::from_millis(100)).await;
+                        // déjà traité
+                        sleep(Duration::from_millis(50)).await;
                     }
                 }
             }
         }
     });
 
-    // Closure qui prend un argument () pour EventHandler
     let exit_app = move |_: ()| {
         process::exit(0);
     };
@@ -156,14 +171,14 @@ fn MainTimer(
     let time_display = format!("{:02}:{:02}", minutes, seconds);
 
     let start_disabled = matches!(timer_state, TimerState::Running | TimerState::OnBreak);
-    let pause_disabled = !matches!(timer_state, TimerState::Running);
+    let pause_disabled = !matches!(timer_state, TimerState::Running); // reste actif quand en Running, même si pause=0
     let reset_disabled = matches!(timer_state, TimerState::Stopped) && current_time == 0;
 
     let status_text = match timer_state {
         TimerState::Running => "⏲ En cours...",
         TimerState::Paused => "⏸ En pause",
         TimerState::Stopped => "⏹ Chrono arrêté",
-        TimerState::OnBreak => "☕ Pause de 5 secondes",
+        TimerState::OnBreak => "☕ Pause...",
     };
 
     rsx! {
