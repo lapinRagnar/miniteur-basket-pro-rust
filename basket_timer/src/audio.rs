@@ -55,14 +55,6 @@ impl AudioManager {
         }
         Ok(())
     }
-    
-    pub fn stop_all_sounds(&self) {
-        if let Ok(mut sink_guard) = self.sink.lock() {
-            if let Some(sink) = sink_guard.as_mut() {
-                sink.stop();
-            }
-        }
-    }
 }
 
 impl Default for AudioManager {
@@ -71,6 +63,5 @@ impl Default for AudioManager {
     }
 }
 
-// Nécessaire car Rodio n'est pas Send/Sync par défaut
 unsafe impl Send for AudioManager {}
 unsafe impl Sync for AudioManager {}
