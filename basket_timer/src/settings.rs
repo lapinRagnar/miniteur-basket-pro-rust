@@ -31,7 +31,7 @@ impl AppSettings {
         }
         Self::default()
     }
-    
+
     pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
         let config_path = Self::get_config_path();
         if let Some(parent) = config_path.parent() {
@@ -41,7 +41,7 @@ impl AppSettings {
         fs::write(config_path, data)?;
         Ok(())
     }
-    
+
     fn get_config_path() -> PathBuf {
         let mut path = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
         path.push("basket_timer");

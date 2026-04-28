@@ -24,48 +24,54 @@ impl AudioManager {
             tts: Arc::new(Mutex::new(tts)),
         })
     }
-    
-    pub fn say_number(&self, number: u32) -> Result<()> {
+
+    pub fn play_number(&self, number: u32) -> Result<()> {
+        // Tentative avec fichier pré-enregistré
+        let mut num_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        num_path.push("assets/numbers");
+        num_path.push(format!("{}.wav", number));
+
+        if num_path.exists() {
+            if let Ok(mut sink_guard) = self.sink.lock() {
+                if let Some(sink) = sink_guard.as_mut() {
+                    if let Ok(file) = File::open(&num_path) {
+                        if let Ok(source) = Decoder::new(BufReader::new(file)) {
+                            sink.append(source);
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback TTS
         let text = number.to_string();
-        println!("🔊 Voix: {}", text);
+        println!("🔊 Voix TTS: {}", text);
         if let Ok(mut tts) = self.tts.lock() {
             tts.speak(&text, false)?;
         }
         Ok(())
     }
-    
+
     pub fn play_siren(&self) -> Result<()> {
-        println!("🚨 SIRENE !!!");
         let mut siren_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         siren_path.push("assets/sirene.wav");
-        
+
         if siren_path.exists() {
-            println!("Fichier trouvé: {:?}", siren_path);
             if let Ok(mut sink_guard) = self.sink.lock() {
                 if let Some(sink) = sink_guard.as_mut() {
-                    match File::open(&siren_path) {
-                        Ok(file) => {
-                            match Decoder::new(BufReader::new(file)) {
-                                Ok(source) => {
-                                    sink.append(source);
-                                    sink.sleep_until_end(); // attend la fin de la sirène
-                                    println!("Sirène jouée avec succès");
-                                    return Ok(());
-                                },
-                                Err(e) => println!("Erreur décodage: {}", e),
-                            }
-                        },
-                        Err(e) => println!("Erreur ouverture fichier: {}", e),
+                    if let Ok(file) = File::open(&siren_path) {
+                        if let Ok(source) = Decoder::new(BufReader::new(file)) {
+                            sink.append(source);
+                            sink.sleep_until_end();
+                            return Ok(());
+                        }
                     }
                 }
             }
-            println!("Échec de lecture de la sirène");
-        } else {
-            println!("Fichier sirène introuvable à {:?}", siren_path);
         }
-        
-        // Fallback : bip aigu
-        println!("Jouer bip de secours");
+
+        // Bip de secours
         if let Ok(mut sink_guard) = self.sink.lock() {
             if let Some(sink) = sink_guard.as_mut() {
                 let source = SineWave::new(880.0).take_duration(Duration::from_secs(1));

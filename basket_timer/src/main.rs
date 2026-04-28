@@ -1,3 +1,5 @@
+#![allow(dependency_on_unit_never_type_fallback)]
+
 mod timer;
 mod audio;
 mod settings;
@@ -53,7 +55,7 @@ fn App() -> Element {
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             loop {
-                ticker.tick().await;  // attend la prochaine seconde
+                ticker.tick().await;
 
                 let (state, current_secs, loop_enabled, break_duration, initial_seconds) = {
                     let guard = timer.lock().unwrap();
@@ -75,15 +77,12 @@ fn App() -> Element {
                 match state {
                     TimerState::Running => {
                         if current_secs > 0 {
-                            // Mettre à jour l'affichage IMMÉDIATEMENT
                             time_signal.set(current_secs);
-                            // Lancer la voix en arrière-plan (ne bloque pas le tick)
                             let audio2 = audio.clone();
                             let secs = current_secs;
                             tokio::task::spawn_blocking(move || {
-                                let _ = audio2.say_number(secs);
+                                let _ = audio2.play_number(secs);
                             });
-                            // Décrémenter après l'affichage
                             {
                                 let mut guard = timer.lock().unwrap();
                                 if guard.current_seconds > 0 {
@@ -91,17 +90,14 @@ fn App() -> Element {
                                 }
                             }
                         } else {
-                            // Arrivé à zéro
                             let audio2 = audio.clone();
                             tokio::task::spawn_blocking(move || {
                                 let _ = audio2.play_siren();
                             });
                             if loop_enabled {
                                 if break_duration == 0 {
-                                    // Redémarrage immédiat
                                     let mut guard = timer.lock().unwrap();
                                     guard.current_seconds = initial_seconds;
-                                    // reste en Running
                                 } else {
                                     break_remaining = break_duration;
                                     let mut guard = timer.lock().unwrap();
@@ -118,115 +114,118 @@ fn App() -> Element {
                     }
                     TimerState::Paused => {
                         state_signal.set(TimerState::Paused);
-                        sleep(Duration::from_millis(50)).await;
+                        sleep(Duration::from_millis(100)).await;
                     }
                     TimerState::Stopped => {
                         state_signal.set(TimerState::Stopped);
-                        sleep(Duration::from_millis(50)).await;
+                        sleep(Duration::from_millis(100)).await;
                     }
                     TimerState::OnBreak => {
-                        // déjà traité
-                        sleep(Duration::from_millis(50)).await;
+                        sleep(Duration::from_millis(100)).await;
                     }
                 }
             }
         }
     });
 
-    let exit_app = move |_: ()| {
-        process::exit(0);
-    };
-
     rsx! {
         div {
+            // Style CSS avec accolades échappées
+            style { "
+                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+                body {{ background: #0a0e1a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }}
+                .app-container {{ max-width: 800px; width: 100%; margin: 0 auto; background: #111827; border-radius: 48px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); padding: 40px 30px 30px 30px; transition: all 0.3s ease; }}
+                .status {{ text-align: center; font-size: 1.5rem; font-weight: 600; letter-spacing: 1px; margin-bottom: 20px; color: #9ca3af; text-transform: uppercase; }}
+                .timer-display {{ text-align: center; font-size: 8rem; font-weight: 900; font-family: 'Courier New', monospace; color: #10b981; background: #1f2937; padding: 40px 20px; border-radius: 40px; margin: 20px 0 40px 0; letter-spacing: 8px; text-shadow: 0 0 10px rgba(16, 185, 129, 0.3); box-shadow: inset 0 2px 5px rgba(0,0,0,0.2), 0 5px 15px rgba(0,0,0,0.1); }}
+                .controls {{ display: flex; justify-content: center; gap: 20px; margin-bottom: 25px; flex-wrap: wrap; }}
+                .bottom-controls {{ display: flex; justify-content: center; margin-top: 10px; }}
+                .btn {{ padding: 14px 28px; font-size: 1.1rem; font-weight: 600; border: none; border-radius: 60px; cursor: pointer; transition: all 0.2s ease; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }}
+                .btn-green {{ background: #10b981; }}
+                .btn-green:hover {{ background: #059669; transform: scale(1.02); box-shadow: 0 5px 15px rgba(16, 185, 129, 0.4); }}
+                .btn-yellow {{ background: #f59e0b; }}
+                .btn-yellow:hover {{ background: #d97706; transform: scale(1.02); }}
+                .btn-red {{ background: #ef4444; }}
+                .btn-red:hover {{ background: #dc2626; transform: scale(1.02); }}
+                .btn-blue {{ background: #3b82f6; }}
+                .btn-blue:hover {{ background: #2563eb; transform: scale(1.02); }}
+                .btn-gray {{ background: #4b5563; }}
+                .btn-gray:hover {{ background: #374151; transform: scale(1.02); }}
+                .btn:disabled {{ opacity: 0.5; cursor: not-allowed; transform: none; }}
+                .settings-container {{ background: #1f2937; border-radius: 32px; padding: 30px; color: white; }}
+                .settings-form label {{ color: #9ca3af; margin-bottom: 8px; display: block; font-weight: 500; }}
+                .settings-form input {{ width: 100%; padding: 12px; border-radius: 20px; border: none; background: #111827; color: white; font-size: 1rem; margin-bottom: 20px; }}
+                .settings-buttons {{ display: flex; gap: 15px; justify-content: center; margin-top: 20px; }}
+                h2 {{ color: #f3f4f6; text-align: center; margin-bottom: 30px; }}
+            "}
+
             if show_settings() {
-                SettingsPanel {
-                    settings,
-                    app_state: app_state.clone(),
-                    on_close: move |_| show_settings.set(false),
+                div { class: "app-container",
+                    SettingsPanel {
+                        settings,
+                        app_state: app_state.clone(),
+                        on_close: move |_| show_settings.set(false),
+                    }
                 }
             } else {
-                MainTimer {
-                    current_time: current_time(),
-                    timer_state: timer_state(),
-                    app_state: app_state.clone(),
-                    on_settings: move |_| show_settings.set(true),
-                    on_exit: exit_app,
+                div { class: "app-container",
+                    div { class: "status",
+                        match timer_state() {
+                            TimerState::Running => "⏲ EN COURS",
+                            TimerState::Paused => "⏸ EN PAUSE",
+                            TimerState::Stopped => "⏹ ARRÊTÉ",
+                            TimerState::OnBreak => "☕ PAUSE",
+                        }
+                    }
+                    div { class: "timer-display", {
+                        let minutes = current_time() / 60;
+                        let seconds = current_time() % 60;
+                        format!("{:02}:{:02}", minutes, seconds)
+                    }}
+                    div { class: "controls",
+                        button {
+                            class: "btn btn-green",
+                            disabled: matches!(timer_state(), TimerState::Running | TimerState::OnBreak),
+                            onclick: move |_| {
+                                let app = app_state.read();
+                                let mut timer = app.timer.lock().unwrap();
+                                timer.state = TimerState::Running;
+                            },
+                            "▶ Démarrer"
+                        }
+                        button {
+                            class: "btn btn-yellow",
+                            disabled: !matches!(timer_state(), TimerState::Running),
+                            onclick: move |_| {
+                                let app = app_state.read();
+                                let mut timer = app.timer.lock().unwrap();
+                                timer.state = TimerState::Paused;
+                            },
+                            "⏸ Pause"
+                        }
+                        button {
+                            class: "btn btn-red",
+                            onclick: move |_| {
+                                let app = app_state.read();
+                                let mut timer = app.timer.lock().unwrap();
+                                timer.reset();
+                            },
+                            "🔄 Reset"
+                        }
+                        button {
+                            class: "btn btn-blue",
+                            onclick: move |_| show_settings.set(true),
+                            "⚙ Paramètres"
+                        }
+                    }
+                    div { class: "bottom-controls",
+                        button {
+                            class: "btn btn-gray",
+                            onclick: move |_| process::exit(0),
+                            "🚪 Quitter"
+                        }
+                    }
                 }
             }
-        }
-    }
-}
-
-#[component]
-fn MainTimer(
-    current_time: u32,
-    timer_state: TimerState,
-    app_state: Signal<AppState>,
-    on_settings: EventHandler<()>,
-    on_exit: EventHandler<()>,
-) -> Element {
-    let minutes = current_time / 60;
-    let seconds = current_time % 60;
-    let time_display = format!("{:02}:{:02}", minutes, seconds);
-
-    let start_disabled = matches!(timer_state, TimerState::Running | TimerState::OnBreak);
-    let pause_disabled = !matches!(timer_state, TimerState::Running); // reste actif quand en Running, même si pause=0
-    let reset_disabled = matches!(timer_state, TimerState::Stopped) && current_time == 0;
-
-    let status_text = match timer_state {
-        TimerState::Running => "⏲ En cours...",
-        TimerState::Paused => "⏸ En pause",
-        TimerState::Stopped => "⏹ Chrono arrêté",
-        TimerState::OnBreak => "☕ Pause...",
-    };
-
-    rsx! {
-        div { class: "timer-container",
-            div { class: "timer-display", "{time_display}" }
-            div { class: "controls",
-                button {
-                    class: "btn btn-green",
-                    disabled: start_disabled,
-                    onclick: move |_| {
-                        let app = app_state.read();
-                        let mut timer = app.timer.lock().unwrap();
-                        timer.state = TimerState::Running;
-                    },
-                    "▶ Démarrer"
-                }
-                button {
-                    class: "btn btn-yellow",
-                    disabled: pause_disabled,
-                    onclick: move |_| {
-                        let app = app_state.read();
-                        let mut timer = app.timer.lock().unwrap();
-                        timer.state = TimerState::Paused;
-                    },
-                    "⏸ Pause"
-                }
-                button {
-                    class: "btn btn-red",
-                    disabled: reset_disabled,
-                    onclick: move |_| {
-                        let app = app_state.read();
-                        let mut timer = app.timer.lock().unwrap();
-                        timer.reset();
-                    },
-                    "🔄 Reset"
-                }
-                button {
-                    class: "btn btn-blue",
-                    onclick: move |_| on_settings.call(()),
-                    "⚙ Paramètres"
-                }
-                button {
-                    class: "btn btn-gray",
-                    onclick: move |_| on_exit.call(()),
-                    "🚪 Quitter"
-                }
-            }
-            div { class: "timer-status", "{status_text}" }
         }
     }
 }
