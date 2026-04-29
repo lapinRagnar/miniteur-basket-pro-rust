@@ -10,7 +10,6 @@ use audio::AudioManager;
 use settings::AppSettings;
 use std::sync::{Arc, Mutex};
 use tokio::time::{sleep, Duration, interval};
-use std::process;
 
 fn main() {
     dioxus::launch(App);
@@ -130,18 +129,17 @@ fn App() -> Element {
 
     rsx! {
         div {
-            // Style CSS avec accolades échappées
             style { "
                 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
                 body {{ background: #0a0e1a; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; min-height: 100vh; display: flex; justify-content: center; align-items: center; padding: 20px; }}
-                .app-container {{ max-width: 800px; width: 100%; margin: 0 auto; background: #111827; border-radius: 48px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); padding: 40px 30px 30px 30px; transition: all 0.3s ease; }}
+                .app-container {{ max-width: 800px; width: 100%; margin: 0 auto; background: #111827; border-radius: 48px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); padding: 40px 30px 30px 30px; }}
                 .status {{ text-align: center; font-size: 1.5rem; font-weight: 600; letter-spacing: 1px; margin-bottom: 20px; color: #9ca3af; text-transform: uppercase; }}
-                .timer-display {{ text-align: center; font-size: 8rem; font-weight: 900; font-family: 'Courier New', monospace; color: #10b981; background: #1f2937; padding: 40px 20px; border-radius: 40px; margin: 20px 0 40px 0; letter-spacing: 8px; text-shadow: 0 0 10px rgba(16, 185, 129, 0.3); box-shadow: inset 0 2px 5px rgba(0,0,0,0.2), 0 5px 15px rgba(0,0,0,0.1); }}
+                .timer-display {{ text-align: center; font-size: 8rem; font-weight: 900; font-family: 'Courier New', monospace; color: #10b981; background: #1f2937; padding: 40px 20px; border-radius: 40px; margin: 20px 0 40px 0; letter-spacing: 8px; text-shadow: 0 0 10px rgba(16, 185, 129, 0.3); }}
                 .controls {{ display: flex; justify-content: center; gap: 20px; margin-bottom: 25px; flex-wrap: wrap; }}
                 .bottom-controls {{ display: flex; justify-content: center; margin-top: 10px; }}
                 .btn {{ padding: 14px 28px; font-size: 1.1rem; font-weight: 600; border: none; border-radius: 60px; cursor: pointer; transition: all 0.2s ease; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }}
                 .btn-green {{ background: #10b981; }}
-                .btn-green:hover {{ background: #059669; transform: scale(1.02); box-shadow: 0 5px 15px rgba(16, 185, 129, 0.4); }}
+                .btn-green:hover {{ background: #059669; transform: scale(1.02); }}
                 .btn-yellow {{ background: #f59e0b; }}
                 .btn-yellow:hover {{ background: #d97706; transform: scale(1.02); }}
                 .btn-red {{ background: #ef4444; }}
@@ -157,7 +155,6 @@ fn App() -> Element {
                 .settings-buttons {{ display: flex; gap: 15px; justify-content: center; margin-top: 20px; }}
                 h2 {{ color: #f3f4f6; text-align: center; margin-bottom: 30px; }}
             "}
-
             if show_settings() {
                 div { class: "app-container",
                     SettingsPanel {
@@ -220,7 +217,7 @@ fn App() -> Element {
                     div { class: "bottom-controls",
                         button {
                             class: "btn btn-gray",
-                            onclick: move |_| process::exit(0),
+                            onclick: move |_| std::process::exit(0),
                             "🚪 Quitter"
                         }
                     }

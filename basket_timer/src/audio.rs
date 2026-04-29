@@ -26,27 +26,39 @@ impl AudioManager {
     }
 
     pub fn play_number(&self, number: u32) -> Result<()> {
-        // Tentative avec fichier pré-enregistré
-        let mut num_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        num_path.push("assets/numbers");
-        num_path.push(format!("{}.wav", number));
-
-        if num_path.exists() {
+        // Construction du chemin vers assets/numbers/X.wav
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("assets");
+        path.push("numbers");
+        path.push(format!("{}.wav", number));
+        
+        println!("🔊 Trying to play: {:?}", path);
+        
+        if path.exists() {
             if let Ok(mut sink_guard) = self.sink.lock() {
                 if let Some(sink) = sink_guard.as_mut() {
-                    if let Ok(file) = File::open(&num_path) {
-                        if let Ok(source) = Decoder::new(BufReader::new(file)) {
-                            sink.append(source);
-                            return Ok(());
-                        }
+                    match File::open(&path) {
+                        Ok(file) => {
+                            match Decoder::new(BufReader::new(file)) {
+                                Ok(source) => {
+                                    sink.append(source);
+                                    // Ne pas attendre la fin, pour ne pas bloquer
+                                    return Ok(());
+                                },
+                                Err(e) => println!("Erreur décodage {:?}: {}", path, e),
+                            }
+                        },
+                        Err(e) => println!("Erreur ouverture {:?}: {}", path, e),
                     }
                 }
             }
+        } else {
+            println!("Fichier non trouvé: {:?}", path);
         }
-
+        
         // Fallback TTS
         let text = number.to_string();
-        println!("🔊 Voix TTS: {}", text);
+        println!("🔊 Fallback TTS: {}", text);
         if let Ok(mut tts) = self.tts.lock() {
             tts.speak(&text, false)?;
         }
@@ -56,21 +68,20 @@ impl AudioManager {
     pub fn play_siren(&self) -> Result<()> {
         let mut siren_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         siren_path.push("assets/sirene.wav");
-
+        
         if siren_path.exists() {
             if let Ok(mut sink_guard) = self.sink.lock() {
                 if let Some(sink) = sink_guard.as_mut() {
                     if let Ok(file) = File::open(&siren_path) {
                         if let Ok(source) = Decoder::new(BufReader::new(file)) {
                             sink.append(source);
-                            sink.sleep_until_end();
+                            sink.sleep_until_end(); // pour la sirène on attend
                             return Ok(());
                         }
                     }
                 }
             }
         }
-
         // Bip de secours
         if let Ok(mut sink_guard) = self.sink.lock() {
             if let Some(sink) = sink_guard.as_mut() {
