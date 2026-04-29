@@ -1,3 +1,5 @@
+//! Application principale d'un minuteur de basket avec interface Dioxus.
+
 #![allow(rust_2024_compatibility)]
 
 mod timer;
@@ -15,14 +17,17 @@ fn main() {
     dioxus::launch(App);
 }
 
+/// État global partagé entre les composants.
 #[derive(Clone)]
 struct AppState {
     timer: Arc<Mutex<BasketTimer>>,
     audio: AudioManager,
 }
 
+/// Composant racine de l'application.
 #[component]
 fn App() -> Element {
+    // Signaux partagés
     let mut current_time = use_signal(|| 12);
     let mut timer_state = use_signal(|| TimerState::Stopped);
     let mut show_settings = use_signal(|| false);
@@ -45,6 +50,7 @@ fn App() -> Element {
     let mut time_signal = current_time;
     let mut state_signal = timer_state;
 
+    // Future asynchrone gérant le compte à rebours
     use_future(move || {
         let timer = timer_clone.clone();
         let audio = audio_clone.clone();
@@ -61,6 +67,7 @@ fn App() -> Element {
                     (guard.state, guard.current_seconds, guard.loop_enabled, guard.break_duration, guard.initial_seconds)
                 };
 
+                // Pause automatique entre cycles
                 if break_remaining > 0 {
                     state_signal.set(TimerState::OnBreak);
                     break_remaining -= 1;
@@ -89,6 +96,7 @@ fn App() -> Element {
                                 }
                             }
                         } else {
+                            // Arrivé à zéro
                             time_signal.set(0);
                             let audio2 = audio.clone();
                             tokio::task::spawn_blocking(move || {
@@ -128,15 +136,32 @@ fn App() -> Element {
         }
     });
 
+    // Réinitialisation
     let mut on_reset = move |_| {
         let app = app_state.read();
         let mut timer = app.timer.lock().unwrap();
         timer.reset();
-        let new_time = timer.current_seconds;
-        current_time.set(new_time);
+        current_time.set(timer.current_seconds);
         timer_state.set(TimerState::Stopped);
     };
 
+    // Bascule Démarrer/Pause (met à jour immédiatement l'UI)
+    let on_toggle = move |_| {
+        let app = app_state.read();
+        let mut timer = app.timer.lock().unwrap();
+        match timer.state {
+            TimerState::Running => {
+                timer.state = TimerState::Paused;
+                timer_state.set(TimerState::Paused);
+            }
+            _ => {
+                timer.state = TimerState::Running;
+                timer_state.set(TimerState::Running);
+            }
+        }
+    };
+
+    // Interface utilisateur (CSS intégré)
     rsx! {
         div {
             style { "
@@ -164,6 +189,7 @@ fn App() -> Element {
                 .settings-form input {{ width: 100%; padding: 12px; border-radius: 20px; border: none; background: #111827; color: white; font-size: 1rem; margin-bottom: 20px; }}
                 .settings-buttons {{ display: flex; gap: 15px; justify-content: center; margin-top: 20px; }}
                 h2 {{ color: #f3f4f6; text-align: center; margin-bottom: 30px; }}
+                .error-msg {{ color: #ef4444; font-size: 0.85rem; margin-top: -10px; margin-bottom: 10px; }}
             "}
 
             if show_settings() {
@@ -190,18 +216,9 @@ fn App() -> Element {
                         format!("{:02}:{:02}", minutes, seconds)
                     }}
                     div { class: "controls",
-                        // Bouton unique toggle (Démarrer / Pause)
                         button {
                             class: if matches!(timer_state(), TimerState::Running) { "btn btn-yellow" } else { "btn btn-green" },
-                            onclick: move |_| {
-                                let app = app_state.read();
-                                let mut timer = app.timer.lock().unwrap();
-                                if timer.state == TimerState::Running {
-                                    timer.state = TimerState::Paused;
-                                } else {
-                                    timer.state = TimerState::Running;
-                                }
-                            },
+                            onclick: on_toggle,
                             if matches!(timer_state(), TimerState::Running) { "⏸ Pause" } else { "▶ Démarrer" }
                         }
                         button {
@@ -219,14 +236,6 @@ fn App() -> Element {
                     div { class: "bottom-controls",
                         button {
                             class: "btn btn-gray",
-                            onclick: move |_| {
-                                let app = app_state.read();
-                                app.audio.test_sound();
-                            },
-                            "🔊 Test son"
-                        }
-                        button {
-                            class: "btn btn-gray",
                             onclick: move |_| std::process::exit(0),
                             "🚪 Quitter"
                         }
@@ -237,6 +246,7 @@ fn App() -> Element {
     }
 }
 
+/// Panneau de configuration (paramètres)
 #[component]
 fn SettingsPanel(
     mut settings: Signal<AppSettings>,
@@ -246,36 +256,69 @@ fn SettingsPanel(
     let mut start_val = use_signal(|| settings().start_seconds);
     let mut break_val = use_signal(|| settings().break_seconds);
     let mut loop_val = use_signal(|| settings().loop_enabled);
+    let mut error_msg = use_signal(|| String::new());
+
+    let on_save = move |_| {
+        let new_start = start_val();
+        let new_break = break_val();
+        if new_start < 4 || new_start > 12 {
+            error_msg.set("Le temps de départ doit être compris entre 4 et 12 secondes".to_string());
+            return;
+        }
+        if new_break < 4 || new_break > 12 {
+            error_msg.set("La durée de pause doit être comprise entre 4 et 12 secondes".to_string());
+            return;
+        }
+        error_msg.set(String::new());
+        let new = AppSettings {
+            start_seconds: new_start,
+            break_seconds: new_break,
+            loop_enabled: loop_val(),
+        };
+        let app = app_state.read();
+        let mut timer = app.timer.lock().unwrap();
+        timer.set_time(new.start_seconds);
+        timer.break_duration = new.break_seconds;
+        timer.loop_enabled = new.loop_enabled;
+        timer.reset();
+        let _ = new.save();
+        settings.set(new);
+        on_close.call(());
+    };
 
     rsx! {
         div { class: "settings-container",
             h2 { "Paramètres" }
             div { class: "settings-form",
-                label { "Temps de départ (secondes):" }
+                label { "Temps de départ (secondes) :" }
                 input {
                     r#type: "number",
                     value: "{start_val}",
                     oninput: move |e| {
                         if let Ok(val) = e.value().parse::<u32>() {
                             start_val.set(val);
+                            error_msg.set(String::new());
                         }
                     },
-                    min: "1",
-                    max: "3600",
+                    min: "4",
+                    max: "12",
+                    step: "1",
                 }
-                label { "Durée de pause (secondes):" }
+                label { "Durée de pause (secondes) :" }
                 input {
                     r#type: "number",
                     value: "{break_val}",
                     oninput: move |e| {
                         if let Ok(val) = e.value().parse::<u32>() {
                             break_val.set(val);
+                            error_msg.set(String::new());
                         }
                     },
-                    min: "0",
-                    max: "300",
+                    min: "4",
+                    max: "12",
+                    step: "1",
                 }
-                label { "Répéter en boucle:" }
+                label { "Répéter en boucle :" }
                 input {
                     r#type: "checkbox",
                     checked: "{loop_val}",
@@ -283,26 +326,14 @@ fn SettingsPanel(
                         loop_val.set(e.value() == "true");
                     },
                 }
+                if !error_msg().is_empty() {
+                    div { class: "error-msg", "{error_msg}" }
+                }
             }
             div { class: "settings-buttons",
                 button {
                     class: "btn btn-green",
-                    onclick: move |_| {
-                        let new = AppSettings {
-                            start_seconds: start_val(),
-                            break_seconds: break_val(),
-                            loop_enabled: loop_val(),
-                        };
-                        let app = app_state.read();
-                        let mut timer = app.timer.lock().unwrap();
-                        timer.set_time(new.start_seconds);
-                        timer.break_duration = new.break_seconds;
-                        timer.loop_enabled = new.loop_enabled;
-                        timer.reset();
-                        let _ = new.save();
-                        settings.set(new);
-                        on_close.call(());
-                    },
+                    onclick: on_save,
                     "💾 Sauvegarder"
                 }
                 button {

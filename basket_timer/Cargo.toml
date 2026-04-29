@@ -1,7 +1,11 @@
 [package]
 name = "basket_timer"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
+authors = ["lapinragnar"]
+description = "Minuteur de basket professionnel avec voix et sirène, multiplateforme (Windows/Linux/macOS/Android)"
+license = "MIT"
+repository = "https://github.com/lapinRagnar/miniteur-basket-pro-rust"
 
 [dependencies]
 dioxus = { version = "0.5", features = ["mobile"] }
