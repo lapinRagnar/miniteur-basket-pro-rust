@@ -128,7 +128,6 @@ fn App() -> Element {
         }
     });
 
-    // Callback pour le Reset (mut nécessaire)
     let mut on_reset = move |_| {
         let app = app_state.read();
         let mut timer = app.timer.lock().unwrap();
@@ -191,28 +190,23 @@ fn App() -> Element {
                         format!("{:02}:{:02}", minutes, seconds)
                     }}
                     div { class: "controls",
+                        // Bouton unique toggle (Démarrer / Pause)
                         button {
-                            class: "btn btn-green",
-                            disabled: matches!(timer_state(), TimerState::Running | TimerState::OnBreak),
+                            class: if matches!(timer_state(), TimerState::Running) { "btn btn-yellow" } else { "btn btn-green" },
                             onclick: move |_| {
                                 let app = app_state.read();
                                 let mut timer = app.timer.lock().unwrap();
-                                timer.state = TimerState::Running;
+                                if timer.state == TimerState::Running {
+                                    timer.state = TimerState::Paused;
+                                } else {
+                                    timer.state = TimerState::Running;
+                                }
                             },
-                            "▶ Démarrer"
-                        }
-                        button {
-                            class: "btn btn-yellow",
-                            disabled: !matches!(timer_state(), TimerState::Running),
-                            onclick: move |_| {
-                                let app = app_state.read();
-                                let mut timer = app.timer.lock().unwrap();
-                                timer.state = TimerState::Paused;
-                            },
-                            "⏸ Pause"
+                            if matches!(timer_state(), TimerState::Running) { "⏸ Pause" } else { "▶ Démarrer" }
                         }
                         button {
                             class: "btn btn-red",
+                            disabled: matches!(timer_state(), TimerState::Stopped) && current_time() == 0,
                             onclick: move |_| on_reset(()),
                             "🔄 Reset"
                         }
