@@ -1,4 +1,4 @@
-#![allow(dependency_on_unit_never_type_fallback)]
+#![allow(rust_2024_compatibility)]
 
 mod timer;
 mod audio;
@@ -23,8 +23,8 @@ struct AppState {
 
 #[component]
 fn App() -> Element {
-    let current_time = use_signal(|| 12);
-    let timer_state = use_signal(|| TimerState::Stopped);
+    let mut current_time = use_signal(|| 12);
+    let mut timer_state = use_signal(|| TimerState::Stopped);
     let mut show_settings = use_signal(|| false);
     let settings = use_signal(|| AppSettings::load());
 
@@ -80,7 +80,7 @@ fn App() -> Element {
                             let audio2 = audio.clone();
                             let secs = current_secs;
                             tokio::task::spawn_blocking(move || {
-                                let _ = audio2.play_number(secs);
+                                audio2.play_number(secs);
                             });
                             {
                                 let mut guard = timer.lock().unwrap();
@@ -89,9 +89,10 @@ fn App() -> Element {
                                 }
                             }
                         } else {
+                            time_signal.set(0);
                             let audio2 = audio.clone();
                             tokio::task::spawn_blocking(move || {
-                                let _ = audio2.play_siren();
+                                audio2.play_siren();
                             });
                             if loop_enabled {
                                 if break_duration == 0 {
@@ -127,6 +128,16 @@ fn App() -> Element {
         }
     });
 
+    // Callback pour le Reset (mut nécessaire)
+    let mut on_reset = move |_| {
+        let app = app_state.read();
+        let mut timer = app.timer.lock().unwrap();
+        timer.reset();
+        let new_time = timer.current_seconds;
+        current_time.set(new_time);
+        timer_state.set(TimerState::Stopped);
+    };
+
     rsx! {
         div {
             style { "
@@ -136,7 +147,7 @@ fn App() -> Element {
                 .status {{ text-align: center; font-size: 1.5rem; font-weight: 600; letter-spacing: 1px; margin-bottom: 20px; color: #9ca3af; text-transform: uppercase; }}
                 .timer-display {{ text-align: center; font-size: 8rem; font-weight: 900; font-family: 'Courier New', monospace; color: #10b981; background: #1f2937; padding: 40px 20px; border-radius: 40px; margin: 20px 0 40px 0; letter-spacing: 8px; text-shadow: 0 0 10px rgba(16, 185, 129, 0.3); }}
                 .controls {{ display: flex; justify-content: center; gap: 20px; margin-bottom: 25px; flex-wrap: wrap; }}
-                .bottom-controls {{ display: flex; justify-content: center; margin-top: 10px; }}
+                .bottom-controls {{ display: flex; justify-content: center; gap: 15px; margin-top: 20px; }}
                 .btn {{ padding: 14px 28px; font-size: 1.1rem; font-weight: 600; border: none; border-radius: 60px; cursor: pointer; transition: all 0.2s ease; color: white; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }}
                 .btn-green {{ background: #10b981; }}
                 .btn-green:hover {{ background: #059669; transform: scale(1.02); }}
@@ -155,6 +166,7 @@ fn App() -> Element {
                 .settings-buttons {{ display: flex; gap: 15px; justify-content: center; margin-top: 20px; }}
                 h2 {{ color: #f3f4f6; text-align: center; margin-bottom: 30px; }}
             "}
+
             if show_settings() {
                 div { class: "app-container",
                     SettingsPanel {
@@ -201,11 +213,7 @@ fn App() -> Element {
                         }
                         button {
                             class: "btn btn-red",
-                            onclick: move |_| {
-                                let app = app_state.read();
-                                let mut timer = app.timer.lock().unwrap();
-                                timer.reset();
-                            },
+                            onclick: move |_| on_reset(()),
                             "🔄 Reset"
                         }
                         button {
@@ -215,6 +223,14 @@ fn App() -> Element {
                         }
                     }
                     div { class: "bottom-controls",
+                        button {
+                            class: "btn btn-gray",
+                            onclick: move |_| {
+                                let app = app_state.read();
+                                app.audio.test_sound();
+                            },
+                            "🔊 Test son"
+                        }
                         button {
                             class: "btn btn-gray",
                             onclick: move |_| std::process::exit(0),
